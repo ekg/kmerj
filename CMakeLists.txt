@@ -95,7 +95,7 @@ set(tayweeargs_INCLUDE "${SOURCE_DIR}")
 # mmmultimap (memory mapped multimap)
 ExternalProject_Add(mmmultimap
   GIT_REPOSITORY "https://github.com/ekg/mmmultimap.git"
-  GIT_TAG "ecbc55799e72076286e19e774d842168db14e8bb"
+  GIT_TAG "9a7c6dc3550c5fc495a3331cc7c3219ae574b5ca"
   BUILD_COMMAND ""
   UPDATE_COMMAND ""
   INSTALL_COMMAND "")
@@ -148,7 +148,7 @@ set(CMAKE_BUILD_TYPE Release)
 
 # set up our target executable and specify its dependencies and includes
 add_executable(kmerj
-  ${CMAKE_SOURCE_DIR}/src/kmer.cpp
+  ${CMAKE_SOURCE_DIR}/src/kmerj.cpp
   ${CMAKE_SOURCE_DIR}/src/main.cpp
   )
 add_dependencies(kmerj sdsl-lite)

@@ -5,22 +5,18 @@
 #include <chrono>
 #include "args.hxx"
 #include <endian.h>
-#include "gzstream.h"
-#include "mmmultimap.hpp"
-#include "mmmultiset.hpp"
-#include "kmer.hpp"
+#include "kmerj.hpp"
 
 int main(int argc, char** argv) {
 
     args::ArgumentParser parser("kmerj (kmer histogram generator and comparator)");
     args::HelpFlag help(parser, "help", "display this help summary", {'h', "help"});
-    args::ValueFlag<std::string> in_file(parser, "FILE", "take kmers from this input file", {'i', "in"});
+    args::ValueFlag<std::string> in_file(parser, "FILE", "operate on this single input file", {'i', "in"});
+    args::ValueFlag<std::string> in_file_a(parser, "FILE", "intersect kmers from this file", {'a', "in-a"});
+    args::ValueFlag<std::string> in_file_b(parser, "FILE", "intersect kmers from this file", {'b', "in-b"});
     args::ValueFlag<std::string> db_file(parser, "FILE", "accumulate kmers in this temporary memory-mapped file", {'d', "db-file"});
     args::ValueFlag<uint64_t> kmer_size(parser, "N", "the number of bp in each kmer", {'k', "kmer-size"});
-    //args::ValueFlag<uint64_t> max_val(parser, "N", "generate test data in the range [1,max_value]", {'M', "max-value"});
     args::ValueFlag<uint64_t> threads(parser, "N", "number of threads to use", {'t', "threads"});
-    //args::ValueFlag<uint64_t> unique_value_tests(parser, "N", "number of unique value calls to make", {'u', "unique-vals"});
-    //args::Flag test_multiset(parser, "multiset", "test the multiset", {'m', "test-multiset"});
 
     try {
         parser.ParseCLI(argc, argv);
@@ -41,63 +37,46 @@ int main(int argc, char** argv) {
         omp_set_num_threads(args::get(threads));
     }
 
-    if (!args::get(in_file).empty()) {
+    uint64_t k = args::get(kmer_size);
+    if (k > sizeof(uint64_t)*4) {
+        std::cerr << "kmer size must be <= than " << sizeof(uint64_t)*4 << std::endl;
+        exit(1);
+    }
+
+    if (!args::get(in_file).empty() && !args::get(db_file).empty()) {
         std::remove(args::get(db_file).c_str());
         mmmulti::set<uint64_t> ms(args::get(db_file));
-        igzstream in(args::get(in_file).c_str());
-        bool input_is_fasta=false, input_is_fastq=false;
-        // look at the first character to determine if it's fastq or fasta
-        std::string line; // line buffer
-        std::getline(in, line);
-        if (line[0] == '>') {
-            input_is_fasta = true;
-        } else if (line[0] == '@') {
-            input_is_fastq = true;
-        } else {
-            std::cerr << "unknown file format" << std::endl;
-            assert(false);
-        }
-        uint64_t k = args::get(kmer_size);
-        while (in.good()) {
-            std::string seq;
-            // get the sequence
-            if (input_is_fasta) {
-                while (std::getline(in, line)) {
-                    if (line[0] == '>') {
-                        // this is the header of the next sequence
-                        break;
-                    } else {
-                        seq.append(line);
-                    }
-                }
-            } else if (input_is_fastq) {
-                std::getline(in, seq); // sequence
-                std::getline(in, line); // delimiter
-                std::getline(in, line); // quality
-                std::getline(in, line);
-            }
-            // add each kmer in the seq to our set
-            uint64_t end = seq.size()-k;
-            const char* s = seq.c_str();
-            // todo, make an omp task here
-            for (uint64_t i = 0; i < end; ++i) {
-                bool is_dna = true;
-                uint64_t kint = kmerj::seq2bit(s+i, k, is_dna);
-                if (is_dna) ms.append(kint);
-            }
-        }
-        in.close();
-        ms.index();
+        kmerj::kmerize(args::get(in_file), k, ms);
         uint64_t i = 0;
         uint64_t value_count = 0;
         uint64_t unique_value_count = 0;
-        // exercise unique value search
         ms.for_each_value_count([&](const uint64_t& value, const uint64_t& count) {
                 ++unique_value_count;
                 value_count += count;
             });
         std::cerr << value_count << " values" << std::endl;
         std::cerr << unique_value_count << " uniques" << std::endl;
+        std::remove(args::get(db_file).c_str());
+    }
+
+    if (!args::get(in_file_a).empty() && !args::get(in_file_b).empty()
+        && !args::get(db_file).empty()) {
+        std::string db_file_a = args::get(db_file) + ".a";
+        std::string db_file_b = args::get(db_file) + ".b";
+        std::remove(db_file_a.c_str());
+        std::remove(db_file_b.c_str());
+        mmmulti::set<uint64_t> multiset_a(db_file_a);
+        mmmulti::set<uint64_t> multiset_b(db_file_b);
+        kmerj::kmerize(args::get(in_file_a), k, multiset_a);
+        kmerj::kmerize(args::get(in_file_b), k, multiset_b);
+        auto handle_kmer = [&](const uint64_t& kmer,
+                               const uint64_t& count_a,
+                               const uint64_t& count_b) {
+            std::cout << kmerj::unseq2bit(kmer, k) << "\t" << count_a << "\t" << count_b << std::endl;
+        };
+        kmerj::for_each_intersecting_kmer(multiset_a, multiset_b, handle_kmer);
+        std::remove(db_file_a.c_str());
+        std::remove(db_file_b.c_str());
     }
 
     return 0;
