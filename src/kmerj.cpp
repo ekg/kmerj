@@ -67,6 +67,8 @@ void kmerize(const std::string& in_file, const uint64_t& k, mmmulti::set<uint64_
         std::cerr << "unknown file format" << std::endl;
         exit(1);
     }
+#pragma omp parallel default(none) shared(in, ms, input_is_fasta, input_is_fastq, k, line)
+#pragma omp single
     while (in.good()) {
         std::string seq;
         // get the sequence
@@ -86,19 +88,22 @@ void kmerize(const std::string& in_file, const uint64_t& k, mmmulti::set<uint64_
             std::getline(in, line);
         }
         // add each kmer in the seq to our set
-        uint64_t end = seq.size()-k;
-        const char* s = seq.c_str();
-        // todo, make an omp task here
-        for (uint64_t i = 0; i < end; ++i) {
-            bool is_dna = true;
-            uint64_t kint = seq2bit(s+i, k, is_dna);
-            if (is_dna) ms.append(kint);
-            /*
-            if (is_dna && unseq2bit(kint, k) != seq.substr(i, k)) {
-                std::cerr << "for " << kint << " " << unseq2bit(kint, k) << " != " << seq.substr(i, k) << std::endl;
-                exit(1);
+#pragma omp task default(none) firstprivate(seq) shared(ms, k)
+        {
+            uint64_t end = seq.size()-k;
+            const char* s = seq.c_str();
+            // todo, make an omp task here
+            for (uint64_t i = 0; i < end; ++i) {
+                bool is_dna = true;
+                uint64_t kint = seq2bit(s+i, k, is_dna);
+                if (is_dna) ms.append(kint);
+                /*
+                  if (is_dna && unseq2bit(kint, k) != seq.substr(i, k)) {
+                  std::cerr << "for " << kint << " " << unseq2bit(kint, k) << " != " << seq.substr(i, k) << std::endl;
+                  exit(1);
+                  }
+                */
             }
-            */
         }
     }
     in.close();
@@ -113,7 +118,7 @@ void for_each_intersecting_kmer(const mmmulti::set<uint64_t>& a, const mmmulti::
     uint64_t b_size = b.size();
     if (!a_size || !b_size) return;
     uint64_t a_kmer = a.read_value(a_idx++);
-    uint64_t b_kmer = a.read_value(b_idx++);
+    uint64_t b_kmer = b.read_value(b_idx++);
     auto count_common_kmers = [&](void) {
         while (a_idx < a_size && b_idx < b_size
                && a_kmer == b_kmer) {
@@ -137,7 +142,7 @@ void for_each_intersecting_kmer(const mmmulti::set<uint64_t>& a, const mmmulti::
         }
         count_common_kmers();
         while (b_idx < b_size && b_kmer < a_kmer) {
-            b_kmer = a.read_value(b_idx++);
+            b_kmer = b.read_value(b_idx++);
         }
         count_common_kmers();
     }
