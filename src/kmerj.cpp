@@ -53,6 +53,39 @@ std::string unseq2bit(uint64_t v, const uint64_t& size) {
     return s;
 }
 
+double entropy(uint64_t v, const uint64_t& size) {
+    uint64_t counts[4] = {0, 0, 0, 0};
+    for (int64_t i = size-1; i >= 0; --i) {
+        ++counts[v & 0b11];
+        v >>= 2;
+    }
+    double ent = 0;
+    double ln2 = log(2);
+    for (uint8_t i = 0; i < 4; ++i) {
+        if (counts[i]) {
+            double f = (double)counts[i]/size;
+            ent += f * log(f)/ln2;
+        }
+    }
+    return -ent;
+}
+
+double gc_rate(uint64_t v, const uint64_t& size) {
+    uint64_t gc = 0;
+    for (int64_t i = size-1; i >= 0; --i) {
+        switch (v & 0b11) {
+        case 0b10: // G
+        case 0b11: // C
+            ++gc;
+            break;
+        default:
+            break;
+        }
+        v >>= 2;
+    }
+    return (double)gc/size;
+}
+
 void kmerize(const std::string& in_file, const uint64_t& k, mmmulti::set<uint64_t>& ms) {
     igzstream in(in_file.c_str());
     bool input_is_fasta=false, input_is_fastq=false;

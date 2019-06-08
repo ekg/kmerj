@@ -149,6 +149,7 @@ set(CMAKE_BUILD_TYPE Release)
 # set up our target executable and specify its dependencies and includes
 add_executable(kmerj
   ${CMAKE_SOURCE_DIR}/src/kmerj.cpp
+  ${CMAKE_SOURCE_DIR}/src/melting.cpp
   ${CMAKE_SOURCE_DIR}/src/main.cpp
   )
 add_dependencies(kmerj sdsl-lite)

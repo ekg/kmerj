@@ -6,6 +6,7 @@
 #include "args.hxx"
 #include <endian.h>
 #include "kmerj.hpp"
+#include "melting.hpp"
 
 int main(int argc, char** argv) {
 
@@ -69,10 +70,19 @@ int main(int argc, char** argv) {
         mmmulti::set<uint64_t> multiset_b(db_file_b);
         kmerj::kmerize(args::get(in_file_a), k, multiset_a);
         kmerj::kmerize(args::get(in_file_b), k, multiset_b);
+        uint64_t a_total = multiset_a.size();
+        uint64_t b_total = multiset_b.size();
         auto handle_kmer = [&](const uint64_t& kmer,
                                const uint64_t& count_a,
                                const uint64_t& count_b) {
-            std::cout << kmerj::unseq2bit(kmer, k) << "\t" << count_a << "\t" << count_b << std::endl;
+            std::string kmer_seq = kmerj::unseq2bit(kmer, k);
+            std::cout << kmer_seq << "\t"
+                      << count_a << "\t" << count_b << "\t"
+                      << (double)count_a/a_total << "\t" << (double)count_b/b_total << "\t"
+                      << kmerj::entropy(kmer, k) << "\t"
+                      << kmerj::gc_rate(kmer, k) << "\t"
+                      << kmerj::melting::khandelwal(k, kmer_seq, 0.05, 1e-8)
+                      << std::endl;
         };
         kmerj::for_each_intersecting_kmer(multiset_a, multiset_b, handle_kmer);
         std::remove(db_file_a.c_str());
